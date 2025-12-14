@@ -70,7 +70,7 @@ st.markdown("<p style='text-align: center; color: #666; font-size: 0.9em;'>—�
 @st.cache_resource
 def initialize_rag():
     """
-    初始化 RAG 系统：增加限流机制，防止 Google API 报 429 错误
+    进阶版 RAG 初始化：优先加载本地索引，大大提升启动速度并节省配额
     """
     if "GOOGLE_API_KEY" not in st.secrets:
         st.error("请在 Streamlit Secrets 中配置 GOOGLE_API_KEY")
@@ -78,55 +78,63 @@ def initialize_rag():
 
     api_key = st.secrets["GOOGLE_API_KEY"]
     
-    # 1. 加载数据
-    if not os.path.exists("data/nan_books.txt"):
-        st.error("未找到 data/nan_books.txt 文件，请先上传书籍。")
-        return None
-    
-    try:
-        loader = TextLoader("data/nan_books.txt", encoding="utf-8")
-        docs = loader.load()
-    except Exception as e:
-        st.error(f"读取文件失败，请检查文件编码是否为 UTF-8: {e}")
-        return None
-
-    # 2. 文本切片
-    # 稍微调小一点 chunk_size，让每个切片更轻量
-    text_splitter = RecursiveCharacterTextSplitter(chunk_size=800, chunk_overlap=100)
-    splits = text_splitter.split_documents(docs)
-
-    # 显示进度条，让你知道它在干活
-    progress_text = "正在消化南师的著作（向量化中），请稍候..."
-    my_bar = st.progress(0, text=progress_text)
-    
-    # 3. 向量化模型
-    # 建议改用 text-embedding-004，比 embedding-001 更新更稳，如果报错可改回 models/embedding-001
+    # 定义向量模型 (不管是读取还是新建都需要用到它)
     embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004", google_api_key=api_key)
 
-    # 4. ★★★ 关键修改：分批处理 (Batching) ★★★
+    # --- 路径定义 ---
+    # 我们把向量库存在一个叫 faiss_index 的文件夹里
+    index_path = "faiss_index"
+
     vectorstore = None
-    batch_size = 10  # 每次只处理 10 个切片
-    total_chunks = len(splits)
+    
+    # --- 分支 A: 尝试直接加载“预制菜” (本地索引) ---
+    if os.path.exists(index_path):
+        try:
+            # 允许危险反序列化是因为文件是我们自己生成的，是安全的
+            vectorstore = FAISS.load_local(index_path, embeddings, allow_dangerous_deserialization=True)
+            st.success("✅ 已加载本地索引，跳过 Embedding 过程！")
+        except Exception as e:
+            st.warning(f"本地索引加载失败，将重新生成: {e}")
+    
+    # --- 分支 B: 如果没有本地索引，则重新烹饪 (计算并保存) ---
+    if vectorstore is None:
+        if not os.path.exists("data/nan_books.txt"):
+            st.error("未找到 data/nan_books.txt 文件，且无本地索引。")
+            return None
+        
+        try:
+            loader = TextLoader("data/nan_books.txt", encoding="utf-8")
+            docs = loader.load()
+        except Exception as e:
+            st.error(f"读取文件失败: {e}")
+            return None
 
-    for i in range(0, total_chunks, batch_size):
-        # 取出一批
-        batch = splits[i : i + batch_size]
-        
-        # 如果是第一批，创建向量库；如果是后续批次，添加到现有库
-        if vectorstore is None:
-            vectorstore = FAISS.from_documents(documents=batch, embedding=embeddings)
-        else:
-            vectorstore.add_documents(batch)
-        
-        # 更新进度条
-        progress = min((i + batch_size) / total_chunks, 1.0)
-        my_bar.progress(progress, text=f"正在消化第 {i+1} - {min(i+batch_size, total_chunks)} / {total_chunks} 页...")
-        
-        # ★★★ 强制休息 2 秒，防止 API 也就是累死 ★★★
-        time.sleep(2)
+        text_splitter = RecursiveCharacterTextSplitter(chunk_size=800, chunk_overlap=100)
+        splits = text_splitter.split_documents(docs)
 
-    # 完成后清空进度条
-    my_bar.empty()
+        progress_text = "首次运行：正在构建知识库索引（下次就不用啦）..."
+        my_bar = st.progress(0, text=progress_text)
+        
+        # 分批处理逻辑 (复用之前的限流代码)
+        batch_size = 10
+        total_chunks = len(splits)
+
+        for i in range(0, total_chunks, batch_size):
+            batch = splits[i : i + batch_size]
+            if vectorstore is None:
+                vectorstore = FAISS.from_documents(documents=batch, embedding=embeddings)
+            else:
+                vectorstore.add_documents(batch)
+            
+            progress = min((i + batch_size) / total_chunks, 1.0)
+            my_bar.progress(progress, text=f"构建索引中 {i+1}/{total_chunks}...")
+            time.sleep(1) # 稍微快一点，1秒即可
+
+        my_bar.empty()
+        
+        # ★★★ 关键步骤：保存到硬盘！ ★★★
+        vectorstore.save_local(index_path)
+        st.success("🎉 索引构建完成并已保存到本地！")
 
     # 5. 检索器
     retriever = vectorstore.as_retriever()
@@ -231,4 +239,3 @@ if prompt := st.chat_input("请在此输入您的问题..."):
     # 只有成功回答才加入历史记录
     if "系统错误" not in answer:
         st.session_state.messages.append({"role": "assistant", "content": answer})
-
