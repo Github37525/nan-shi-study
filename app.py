@@ -133,7 +133,7 @@ def initialize_rag():
 
     # 6. LLM 模型配置 (保持不变)
     llm = ChatGoogleGenerativeAI(
-        model="gemini-1.5-flash", 
+        model="gemini-3-pro-preview", 
         temperature=0.7,
         google_api_key=api_key,
         safety_settings={
@@ -231,3 +231,4 @@ if prompt := st.chat_input("请在此输入您的问题..."):
     # 只有成功回答才加入历史记录
     if "系统错误" not in answer:
         st.session_state.messages.append({"role": "assistant", "content": answer})
+
