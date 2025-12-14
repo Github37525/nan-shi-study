@@ -1,5 +1,6 @@
 import streamlit as st
 import os
+import time
 from langchain_community.vectorstores import FAISS
 from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter 
@@ -69,10 +70,8 @@ st.markdown("<p style='text-align: center; color: #666; font-size: 0.9em;'>—�
 @st.cache_resource
 def initialize_rag():
     """
-    初始化 RAG 系统：适配 Google Gemini
+    初始化 RAG 系统：增加限流机制，防止 Google API 报 429 错误
     """
-    # 获取 API KEY
-    # 注意：Streamlit Cloud 的 Secrets 里对应的键名改为 GOOGLE_API_KEY
     if "GOOGLE_API_KEY" not in st.secrets:
         st.error("请在 Streamlit Secrets 中配置 GOOGLE_API_KEY")
         return None
@@ -81,58 +80,80 @@ def initialize_rag():
     
     # 1. 加载数据
     if not os.path.exists("data/nan_books.txt"):
-        if not os.path.exists("data"):
-            os.makedirs("data")
-        # 写入一些默认数据防止报错
-        with open("data/nan_books.txt", "w", encoding='utf-8') as f:
-            f.write("（这是演示数据）南怀瑾说：人生的最高境界是佛为心，道为骨，儒为表。什么是修行？修正自己的行为就是修行，不是叫你一定要去深山老林里坐着。心平气和，就是道。")
+        st.error("未找到 data/nan_books.txt 文件，请先上传书籍。")
+        return None
     
-    loader = TextLoader("data/nan_books.txt", encoding="utf-8")
-    docs = loader.load()
-
-    # 2. 文本切片
-    text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
-    splits = text_splitter.split_documents(docs)
-
-    # 3. 向量化 (Embeddings) - 使用 Google 的模型
-    # model="models/embedding-001" 是目前标准的 Gemini 嵌入模型
     try:
-        embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001", google_api_key=api_key)
-        vectorstore = FAISS.from_documents(documents=splits, embedding=embeddings)
+        loader = TextLoader("data/nan_books.txt", encoding="utf-8")
+        docs = loader.load()
     except Exception as e:
-        st.error(f"Embeddings 初始化失败，请检查 API Key 或网络连接: {e}")
+        st.error(f"读取文件失败，请检查文件编码是否为 UTF-8: {e}")
         return None
 
-    # 4. 检索器
+    # 2. 文本切片
+    # 稍微调小一点 chunk_size，让每个切片更轻量
+    text_splitter = RecursiveCharacterTextSplitter(chunk_size=800, chunk_overlap=100)
+    splits = text_splitter.split_documents(docs)
+
+    # 显示进度条，让你知道它在干活
+    progress_text = "正在消化南师的著作（向量化中），请稍候..."
+    my_bar = st.progress(0, text=progress_text)
+    
+    # 3. 向量化模型
+    # 建议改用 text-embedding-004，比 embedding-001 更新更稳，如果报错可改回 models/embedding-001
+    embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004", google_api_key=api_key)
+
+    # 4. ★★★ 关键修改：分批处理 (Batching) ★★★
+    vectorstore = None
+    batch_size = 10  # 每次只处理 10 个切片
+    total_chunks = len(splits)
+
+    for i in range(0, total_chunks, batch_size):
+        # 取出一批
+        batch = splits[i : i + batch_size]
+        
+        # 如果是第一批，创建向量库；如果是后续批次，添加到现有库
+        if vectorstore is None:
+            vectorstore = FAISS.from_documents(documents=batch, embedding=embeddings)
+        else:
+            vectorstore.add_documents(batch)
+        
+        # 更新进度条
+        progress = min((i + batch_size) / total_chunks, 1.0)
+        my_bar.progress(progress, text=f"正在消化第 {i+1} - {min(i+batch_size, total_chunks)} / {total_chunks} 页...")
+        
+        # ★★★ 强制休息 2 秒，防止 API 也就是累死 ★★★
+        time.sleep(2)
+
+    # 完成后清空进度条
+    my_bar.empty()
+
+    # 5. 检索器
     retriever = vectorstore.as_retriever()
 
-    # 5. LLM 模型 - 配置 Gemini
+    # 6. LLM 模型配置 (保持不变)
     llm = ChatGoogleGenerativeAI(
-        model="gemini-3-pro-preview", 
+        model="gemini-1.5-flash", 
         temperature=0.7,
         google_api_key=api_key,
-        # --- 修复部分开始：使用官方枚举对象 ---
         safety_settings={
             HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
             HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
             HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
             HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
         }
-        # --- 修复部分结束 ---
     )
 
-    # 6. 系统提示词 (System Prompt)
     system_prompt = (
         "你现在是南怀瑾先生（南师）。"
         "【语言风格】"
-        "1. 语气：慈悲、通俗、幽默、长者风范。不要像个机器人。"
-        "2. 口头禅：喜欢用“哎呀”、“那个”、“诸位啊”、“你要晓得”。"
-        "3. 引用：在白话中自然夹杂《论语》、《金刚经》、《易经》等古文，随后立即用大白话解释。"
+        "1. 语气：慈悲、通俗、幽默、长者风范。"
+        "2. 口头禅：‘哎呀’、‘那个’、‘诸位啊’。"
+        "3. 引用：在白话中自然夹杂古文，随后立即解释。"
         "\n"
-        "【教学策略 (Khanmigo 模式)】"
-        "1. **禁止直接给鸡汤**：当用户提出烦恼时，不要直接给建议。"
-        "2. **苏格拉底式反问**：先反问用户，引导他向内求。例如用户问赚钱，你要反问他这一生到底要什么。"
-        "3. **必须基于 Context**：回答必须参考下方的 Context（南师著作原文）。如果原文有相关故事或公案，必须讲出来。"
+        "【教学策略】"
+        "1. 禁止直接给鸡汤。苏格拉底式反问。"
+        "2. 必须基于 Context 回答，如果 Context 里没有，就用通用智慧开导，但不要瞎编原文。"
         "\n\n"
         "参考资料 (Context):\n"
         "{context}"
@@ -172,26 +193,41 @@ if prompt := st.chat_input("请在此输入您的问题..."):
         message_placeholder = st.empty()
         
         if rag_chain:
-            with st.spinner("南师再次轻啜一口茶，微笑看着你..."):
+            with st.spinner("南师再次轻啜一口，微笑的看着你..."):
                 try:
+                    # 1. 调用 RAG 链，获取返回值
                     response = rag_chain.invoke({"input": prompt})
-                    full_response = response["answer"]
-                    message_placeholder.markdown(full_response)
+                    answer = response["answer"]
+                    source_documents = response["context"] # 获取检索到的原文片段
+                    
+                    # 2. 显示回答
+                    message_placeholder.markdown(answer)
+
+                    # 3. --- 新增功能：在折叠框中显示参考来源 ---
+                    with st.expander("🔍 点击查看南师的“书页” (出处)"):
+                        if source_documents:
+                            for i, doc in enumerate(source_documents):
+                                st.markdown(f"**📄 参考片段 {i+1}:**")
+                                # 显示原文内容，使用灰色小字
+                                st.caption(doc.page_content)
+                                st.markdown("---")
+                        else:
+                            st.caption("没有在知识库中找到直接相关的原文，本次回答基于 AI 通用知识。")
+
                 except InvalidArgument as e:
-                     message_placeholder.markdown(f"哎呀，这个话题有点敏感，或者你的 API 设置有点问题。（错误代码：400 - {e}）")
+                     message_placeholder.markdown(f"哎呀，这个话题有点敏感。（错误代码：400 - {e}）")
                 except Exception as e:
-                    # 捕捉其他 Gemini 特有的错误
                     error_msg = str(e)
                     if "429" in error_msg:
                         message_placeholder.markdown("慢点慢点，今天问问题的人太多了，让我喝口茶歇一歇。（API 调用频率超限）")
                     else:
                         message_placeholder.markdown(f"老头子我也糊涂了，没听清你说啥。（系统错误：{e}）")
                         
-                    full_response = "（系统暂时无法回答）"
+                    answer = "（系统暂时无法回答）"
         else:
-            full_response = "请先在后台配置 Google API Key。"
-            message_placeholder.markdown(full_response)
+            answer = "请先在后台配置 Google API Key。"
+            message_placeholder.markdown(answer)
     
-    # 只有成功回答才加入历史记录，避免错误刷屏
-    if "系统错误" not in full_response:
-        st.session_state.messages.append({"role": "assistant", "content": full_response})
+    # 只有成功回答才加入历史记录
+    if "系统错误" not in answer:
+        st.session_state.messages.append({"role": "assistant", "content": answer})
