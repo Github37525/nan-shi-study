@@ -62,7 +62,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.markdown("<h1>🍵 南师书房</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center; color: #666; font-size: 0.9em;'>—— 此时此处，与南怀瑾先生对话 ——</p>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: #666; font-size: 0.9em;'>—— 此时此处，与南怀瑾先生的思想对话 ——</p>", unsafe_allow_html=True)
 
 # --- 2. RAG 系统初始化 (Brain - Google Gemini 版) ---
 
@@ -172,7 +172,7 @@ if prompt := st.chat_input("请在此输入您的问题..."):
         message_placeholder = st.empty()
         
         if rag_chain:
-            with st.spinner("南师正在翻书..."):
+            with st.spinner("南师再次轻啜一口茶，微笑看着你..."):
                 try:
                     response = rag_chain.invoke({"input": prompt})
                     full_response = response["answer"]
