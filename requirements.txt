@@ -7,3 +7,5 @@ langchain-text-splitters==0.2.2
 faiss-cpu
 edge-tts
 tiktoken
+gspread
+oauth2client
