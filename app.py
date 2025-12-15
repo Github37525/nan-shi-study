@@ -233,7 +233,7 @@ for msg in st.session_state.messages:
 # --- 3. 聊天交互逻辑 (修复版) ---
 
 # A. 处理用户输入框 (只负责接收，不负责生成)
-if prompt := st.chat_input("请在此输入您与南师的对话..."):
+if prompt := st.chat_input("请在此输入您与南师的思想对话..."):
     st.session_state.messages.append({"role": "user", "content": prompt})
 
 # B. 判断是否需要 AI 回答
@@ -243,7 +243,7 @@ if st.session_state.messages and st.session_state.messages[-1]["role"] == "user"
     with st.chat_message("assistant", avatar="🍵"):
         message_placeholder = st.empty()
         if rag_chain:
-            with st.spinner("南师正在沉思..."):
+            with st.spinner("南师再次轻啜一口，微笑的看着你..."):
                 try:
                     # 1. 准备上下文
                     chat_history = []
@@ -311,4 +311,5 @@ if st.session_state.messages and st.session_state.messages[-1]["role"] == "assis
                 # 清空建议，防止重复点击
                 st.session_state.current_suggestions = []
                 st.rerun()
+
 
