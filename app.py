@@ -256,7 +256,7 @@ for msg in st.session_state.messages:
 # 输入框与生成逻辑
 if prompt := st.chat_input("请在此输入您与南师的对话..."):
     st.session_state.messages.append({"role": "user", "content": prompt})
-    with st.chat_message("user", avatar="assets/nanshi_icon.png"): st.markdown(prompt)
+    with st.chat_message("user", avatar="assets/nanshi_icon2.png"): st.markdown(prompt)
 
 if st.session_state.messages and st.session_state.messages[-1]["role"] == "user":
     with st.chat_message("assistant", avatar="🍵"):
@@ -313,3 +313,4 @@ if st.session_state.messages and st.session_state.messages[-1]["role"] == "assis
                 st.session_state.messages.append({"role": "user", "content": question})
                 st.session_state.current_suggestions = []
                 st.rerun()
+
