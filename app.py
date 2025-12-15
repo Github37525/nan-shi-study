@@ -139,7 +139,7 @@ st.markdown("""
 # --- 3. 页面布局重构 (把内容移到主界面) ---
 
 # 标题区
-st.markdown("<h1 style='text-align: center;'>🍵 南师书房</h1>", unsafe_allow_html=True)
+st.markdown("<h1 style='text-align: center;'>🍵 书房</h1>", unsafe_allow_html=True)
 st.markdown("<p style='text-align: center; color: #8D6E63; font-size: 0.8em; margin-bottom: 20px; letter-spacing: 2px;'>—— 此时此处，调息静心 ——</p>", unsafe_allow_html=True)
 
 # ★★★ 关键修改：语录卡片移到主界面顶部 ★★★
@@ -186,7 +186,7 @@ def save_to_logs(user_question, ai_answer, sources):
         creds_dict = dict(st.secrets["gcp_service_account"])
         creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
         client = gspread.authorize(creds)
-        sheet = client.open("南师书房日志").sheet1
+        sheet = client.open("书房日志").sheet1
         timestamp = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
         source_str = "; ".join([f"{doc.metadata.get('source')}·{doc.metadata.get('chapter')}" for doc in sources]) if sources else "无引用"
         sheet.append_row([timestamp, user_question, ai_answer, source_str])
@@ -254,7 +254,7 @@ for msg in st.session_state.messages:
              st.audio(msg["audio_path"], format="audio/mp3")
 
 # 输入框与生成逻辑
-if prompt := st.chat_input("请在此输入您与南师的对话..."):
+if prompt := st.chat_input("请在此输入您与南师的思想对话..."):
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user", avatar="assets/nanshi_icon2.png"): st.markdown(prompt)
 
@@ -262,7 +262,7 @@ if st.session_state.messages and st.session_state.messages[-1]["role"] == "user"
     with st.chat_message("assistant", avatar="🍵"):
         message_placeholder = st.empty()
         if rag_chain:
-            with st.spinner("南师正在沉思..."):
+            with st.spinner("南师轻啜一口茶，微笑的看着你..."):
                 try:
                     # RAG 逻辑
                     chat_history = []
@@ -313,4 +313,5 @@ if st.session_state.messages and st.session_state.messages[-1]["role"] == "assis
                 st.session_state.messages.append({"role": "user", "content": question})
                 st.session_state.current_suggestions = []
                 st.rerun()
+
 
