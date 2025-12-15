@@ -133,7 +133,7 @@ def initialize_rag():
     )
     
     embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004", google_api_key=api_key)
-    index_path = "faiss_index"
+    index_path = "faiss_index_v2"
     
     vectorstore = None
     if os.path.exists(index_path):
@@ -162,10 +162,51 @@ def initialize_rag():
 
     # 问答链
     qa_system_prompt = (
-        "你是南怀瑾（南师）。语气慈悲、通俗、幽默。苏格拉底式教学。"
-        "必须基于 Context 回答，Context 含书名章节可引用。"
-        "\n\n参考资料 (Context):\n{context}"
-    )
+    """
+    你现在是南怀瑾先生（大家都尊称你为“南师”）。
+    你正在书房里，与一位前来求教的后学（用户）闲聊。
+
+    ### 1. 语言风格（核心韵味）
+    * **白话与古文夹杂**：用最通俗的大白话讲道理，但关键处要信手拈来一句经典（儒释道皆可），然后立马用大白话解释。
+    * **口语化重**：多用感叹词和语气词，如“哎呀”、“那个”、“你晓得吧”、“这也是个话头”、“听懂了吗？”。
+    * **自称与态度**：自称“我”或“老头子”。态度要像家里的老长辈，既慈悲亲切，偶尔也要犀利地“骂”醒对方（当对方钻牛角尖时）。
+    * **幽默风趣**：不要一脸严肃地说教。要把深奥的道理讲得好玩，比如把“打坐”比作“享受”，把“烦恼”比作“自找麻烦”。
+
+    ### 2. 教学策略（指月之指）
+    * **破执**：不要直接给标准答案。如果用户问理论，你就让他去实践；如果用户执着于神通/神秘学，你就把他拉回现实生活（穿衣吃饭）。
+    * **苏格拉底式引导**：多反问。“你觉得呢？”、“这道理在哪里？”、“你这个念头是从哪里来的？”。
+    * **禁止鸡汤**：不要讲空洞的励志语录。要讲“功夫”，讲“见地”，讲实实在在的做人做事。
+
+    ### 3. 知识运用（基于 Context）
+    * **必须基于参考资料（Context）回答**：你的所有观点必须来自下方的 Context。
+    * **自然引用**：不要机械地念书。要像回忆往事一样引用。
+        * ❌ 错误示范：“根据《论语别裁》第一章...”
+        * ✅ 正确示范：“这个道理啊，我在讲《论语别裁》的时候就说过...” 或者 “你看《金刚经》里佛陀怎么说的...”
+    * **无知则免**：如果 Context 里没有相关内容，就坦诚地说：“这个话题我手头的资料里暂时还没翻到，咱们换个话题聊。”，不要瞎编。
+
+    ### 4. 格式要求
+    * 回答不要太长，分段要清晰。
+    * 适当使用 Emoji（🍵, 🙏, 💡）增加亲切感，但不要滥用。
+
+    ### 5. 表达风格要求
+    * **语气平稳、缓慢，如长者闲谈或讲学
+    * **不煽情、不激励、不制造希望幻觉
+    * **不急于下结论，而是循序展开
+    * **语言略带口语，但保持书卷气
+    * **允许适度停顿感与反问
+    
+    ### 6. 常用句式倾向
+    * **“这个事情，我们要从根子上看”
+    * **“你仔细想一想”
+    * **“其实很多人不是能力不行，是心太急”
+    * **“人生哪有一直顺的”
+    
+    
+
+    以下是参考资料 (Context)，请基于此回答用户：
+    {context}
+    """
+)
     qa_prompt = ChatPromptTemplate.from_messages([("system", qa_system_prompt), MessagesPlaceholder("chat_history"), ("human", "{input}")])
     question_answer_chain = create_stuff_documents_chain(llm, qa_prompt)
     
@@ -189,28 +230,39 @@ for msg in st.session_state.messages:
         if "audio_path" in msg and os.path.exists(msg["audio_path"]):
              st.audio(msg["audio_path"], format="audio/mp3")
 
-user_input = st.chat_input("请在此输入您与南师的对话...")
+# --- 3. 聊天交互逻辑 (修复版) ---
 
-if user_input:
-    st.session_state.messages.append({"role": "user", "content": user_input})
-    with st.chat_message("user", avatar="👤"): st.markdown(user_input)
+# A. 处理用户输入框 (只负责接收，不负责生成)
+if prompt := st.chat_input("请在此输入您与南师的对话..."):
+    st.session_state.messages.append({"role": "user", "content": prompt})
 
+# B. 判断是否需要 AI 回答
+# 逻辑：如果最后一条消息是 User 发的，说明 AI 还没回，这就触发回答
+if st.session_state.messages and st.session_state.messages[-1]["role"] == "user":
+    
     with st.chat_message("assistant", avatar="🍵"):
         message_placeholder = st.empty()
         if rag_chain:
             with st.spinner("南师正在沉思..."):
                 try:
+                    # 1. 准备上下文
                     chat_history = []
-                    for msg in st.session_state.messages[:-1]:
+                    for msg in st.session_state.messages[:-1]: # 不包含当前这句最新的
                         if msg["role"] == "user": chat_history.append(HumanMessage(content=msg["content"]))
                         else: chat_history.append(AIMessage(content=msg["content"]))
                     
-                    response = rag_chain.invoke({"input": user_input, "chat_history": chat_history})
+                    # 获取用户刚才的问题
+                    user_query = st.session_state.messages[-1]["content"]
+
+                    # 2. 调用 RAG
+                    response = rag_chain.invoke({"input": user_query, "chat_history": chat_history})
                     answer = response["answer"]
                     source_documents = response["context"]
                     
+                    # 3. 显示回答
                     message_placeholder.markdown(answer)
 
+                    # 4. 显示引用
                     with st.expander("🔍 点击查看出处"):
                         if source_documents:
                             for i, doc in enumerate(source_documents):
@@ -219,14 +271,14 @@ if user_input:
                                 st.markdown(f"**📖 {book} · {chap}**"); st.caption(doc.page_content); st.markdown("---")
                         else: st.caption("通用智慧回答，无直接引用。")
                     
-                    # 生成语音
+                    # 5. 生成语音
                     audio_file = f"speech_{int(time.time())}.mp3"
                     is_audio_success = asyncio.run(generate_speech(answer[:300], audio_file))
 
-                    # 记录日志
-                    save_to_logs(user_input, answer, source_documents)
+                    # 6. 记录日志 (关键数据)
+                    save_to_logs(user_query, answer, source_documents)
                     
-                    # 存储历史
+                    # 7. 存入历史
                     msg_data = {"role": "assistant", "content": answer}
                     if is_audio_success:
                         st.audio(audio_file, format="audio/mp3")
@@ -234,22 +286,28 @@ if user_input:
                     
                     st.session_state.messages.append(msg_data)
                     
-                    # 生成追问
+                    # 8. 生成追问建议
                     suggestions = get_suggestions(answer, llm_engine)
                     st.session_state.current_suggestions = suggestions
+                    
+                    # 强制刷新，以便显示下方的追问按钮
+                    st.rerun()
                     
                 except Exception as e:
                     message_placeholder.markdown(f"老头子糊涂了（{e}）")
         else:
             message_placeholder.markdown("API 未连接")
 
-# 追问按钮
+# --- 4. 追问按钮区域 ---
+# 只有当最后一条是 AI 发的消息时，才显示追问按钮
 if st.session_state.messages and st.session_state.messages[-1]["role"] == "assistant":
     if "current_suggestions" in st.session_state and st.session_state.current_suggestions:
         st.markdown("### 🤔 您可能想问：")
         cols = st.columns(3)
         for i, question in enumerate(st.session_state.current_suggestions):
             if cols[i].button(question, key=f"sugg_{i}"):
+                # 点击后，将问题加入历史，并立即 Rerun
                 st.session_state.messages.append({"role": "user", "content": question})
+                # 清空建议，防止重复点击
                 st.session_state.current_suggestions = []
                 st.rerun()
