@@ -33,24 +33,116 @@ NAN_QUOTES = [
     "英雄到老皆归佛，宿将还山不论兵。", "多言数穷，不如守中。"
 ]
 
+# --- 页面美化：复刻图1的淡雅渐变风格 ---
 st.markdown("""
 <style>
+    /* 1. 引入中文字体 (思源宋体) - 营造书卷气 */
+    @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;700&display=swap');
+
+    /* 2. 全局背景设定 - 核心修改点 */
     .stApp {
-        background-color: #F9F7F1;
-        background-image: url("https://www.transparenttextures.com/patterns/rice-paper-2.png");
-        font-family: "楷体", "KaiTi", "Songti SC", serif;
+        /* 这里的渐变色：从顶部的“淡茶青色”过渡到底部的“暖米色” */
+        background-image: linear-gradient(180deg, #E0EADC 0%, #F7F4EF 100%);
+        background-attachment: fixed; /* 让背景固定，不随滚动条滚动 */
+        background-size: cover;
     }
-    [data-testid="stChatMessage"]:nth-child(odd) { background-color: rgba(239, 239, 239, 0.7); border-radius: 15px; padding: 15px; border: 1px solid #D3D3D3; }
-    [data-testid="stChatMessage"]:nth-child(even) { background-color: rgba(240, 230, 210, 0.8); border-radius: 15px; padding: 15px; border-left: 4px solid #8B4513; box-shadow: 2px 2px 5px rgba(0,0,0,0.1); }
-    h1 { color: #4A3B2A; text-align: center; font-weight: bold; letter-spacing: 2px; padding-bottom: 10px; border-bottom: 2px solid #8B4513; display: inline-block; }
-    .title-container { text-align: center; margin-bottom: 30px; }
-    [data-testid="stSidebar"] { background-color: #F4EFE5; border-right: 1px solid #D8CFC4; }
-    .quote-card { background-color: #FDFBF7; border: 2px solid #8B4513; border-radius: 8px; padding: 20px; text-align: center; font-size: 1.3em; font-weight: bold; color: #5C4033; box-shadow: 3px 3px 8px rgba(139, 69, 19, 0.2); position: relative; margin-bottom: 20px; }
-    .quote-card::before, .quote-card::after { content: '•'; color: #8B4513; font-size: 2em; position: absolute; top: -15px; }
-    .quote-card::before { left: 10px; } .quote-card::after { right: 10px; }
-    .stButton button { background-color: #F0E6D2; border: 1px solid #8B4513; color: #5C4033; }
-    .stButton button:hover { background-color: #E6D8B8; border-color: #5C4033; color: #3E2B22; }
-    #MainMenu {visibility: hidden;} footer {visibility: hidden;} header {visibility: hidden;}
+    
+    /* 3. 字体全局替换 */
+    html, body, [class*="css"] {
+        font-family: 'Noto Serif SC', 'Songti SC', serif !important; 
+        color: #4A3B2A; /* 深褐墨色字体 */
+    }
+
+    /* 4. 隐藏 Streamlit 默认干扰元素 */
+    header {visibility: hidden;}
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+
+    /* 5. 聊天气泡美化 */
+    
+    /* (A) AI (南师) 的气泡：半透明磨砂玻璃感 */
+    [data-testid="stChatMessage"]:nth-child(odd) {
+        background-color: rgba(255, 255, 255, 0.85); /* 85%透明度的白色 */
+        border: 1px solid rgba(255, 255, 255, 0.5);
+        border-radius: 18px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05); /* 极柔和的阴影 */
+        padding: 20px;
+        margin-bottom: 20px;
+        backdrop-filter: blur(5px); /* 毛玻璃模糊效果 */
+    }
+    
+    /* (B) 用户 (我) 的气泡：深青色/褐色 */
+    [data-testid="stChatMessage"]:nth-child(even) {
+        background-color: #5D7266; /* 莫兰迪绿/青灰色，呼应背景 */
+        color: #FFFFFF !important;
+        border-radius: 18px;
+        padding: 20px;
+        margin-bottom: 20px;
+        text-align: right;
+        flex-direction: row-reverse;
+        box-shadow: 0 4px 8px rgba(93, 114, 102, 0.3);
+    }
+    
+    /* 强制用户文字变白 */
+    [data-testid="stChatMessage"]:nth-child(even) p {
+        color: #FFFFFF !important;
+    }
+
+    /* 6. 顶部标题美化 */
+    h1 {
+        color: #3E2723 !important;
+        font-weight: 700;
+        letter-spacing: 0.1em;
+        padding-top: 10px;
+        text-shadow: 0 1px 2px rgba(255,255,255,0.8);
+    }
+
+    /* 7. 输入框美化 - 悬浮胶囊 */
+    .stChatInput {
+        border-radius: 40px !important;
+        border: 1px solid rgba(93, 114, 102, 0.3) !important;
+        background-color: rgba(255, 255, 255, 0.9) !important;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.05) !important;
+    }
+    
+    /* 8. 侧边栏美化 - 与主背景融合 */
+    [data-testid="stSidebar"] {
+        background-color: rgba(247, 244, 239, 0.95); /* 极淡的米色 */
+        border-right: 1px solid rgba(0,0,0,0.05);
+    }
+    
+    /* 9. 按钮样式 (追问按钮) - 轻盈风 */
+    .stButton button {
+        background-color: rgba(255, 255, 255, 0.6);
+        color: #5D7266;
+        border: 1px solid #5D7266;
+        border-radius: 20px;
+        font-size: 0.9em;
+    }
+    .stButton button:hover {
+        background-color: #5D7266;
+        color: white !important;
+        transform: translateY(-2px); /* 微微上浮 */
+        box-shadow: 0 4px 8px rgba(93, 114, 102, 0.2);
+    }
+
+    /* 10. “今日参悟”卡片 - 极简边框 */
+    .quote-card {
+        background-color: #FFFFFF;
+        border: 2px solid #8D6E63; /* 棕色边框 */
+        border-radius: 16px;
+        padding: 24px;
+        text-align: center;
+        font-size: 1.3em;
+        font-weight: bold;
+        color: #4A3B2A;
+        position: relative;
+        margin-bottom: 20px;
+        box-shadow: inset 0 0 20px rgba(244, 239, 229, 0.5); /* 内发光 */
+    }
+    .quote-card::before { content: '•'; color: #8D6E63; font-size: 2em; position: absolute; top: -15px; left: 10px; }
+    .quote-card::after { content: '•'; color: #8D6E63; font-size: 2em; position: absolute; bottom: -15px; right: 10px; }
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -63,13 +155,17 @@ with st.sidebar:
     st.markdown("### 📜 今日参悟")
     if "daily_quote" not in st.session_state:
         st.session_state.daily_quote = random.choice(NAN_QUOTES)
-    st.markdown(f"<div class='quote-card'>“{st.session_state.daily_quote}”</div><p style='text-align: right; color: #999; font-size: 0.9em;'>—— 南怀瑾</p>", unsafe_allow_html=True)
-    st.markdown("---")
-    st.markdown("### 🎵 伴读琴韵")
-    bgm_path = "assets/bgm.mp3"
-    audio_source = bgm_path if os.path.exists(bgm_path) else "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3"
-    st.audio(audio_source, format="audio/mp3", start_time=0)
-    st.caption("💡 建议点击播放后，将音量调至轻柔。")
+    
+    # --- 替换这一段 ---
+    st.markdown(f"""
+    <div class="quote-card">
+        {st.session_state.daily_quote}
+        <div style='text-align: right; color: #8D6E63; font-size: 0.6em; margin-top: 15px;'>
+            —— 南怀瑾
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+    # --- 替换结束 ---
 
 # --- 功能函数定义区 ---
 
@@ -133,7 +229,7 @@ def initialize_rag():
     )
     
     embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004", google_api_key=api_key)
-    index_path = "faiss_index"
+    index_path = "faiss_index_v2"
     
     vectorstore = None
     if os.path.exists(index_path):
@@ -224,7 +320,7 @@ if "messages" not in st.session_state:
     st.session_state.messages = [{"role": "assistant", "content": "哎呀，随便坐。今天心里有什么放不下的吗？"}]
 
 for msg in st.session_state.messages:
-    avatar = "🍵" if msg["role"] == "assistant" else "👤"
+    avatar = "assets/nanshi_icon.png" if msg["role"] == "assistant" else "👤"
     with st.chat_message(msg["role"], avatar=avatar):
         st.markdown(msg["content"])
         if "audio_path" in msg and os.path.exists(msg["audio_path"]):
@@ -233,17 +329,17 @@ for msg in st.session_state.messages:
 # --- 3. 聊天交互逻辑 (修复版) ---
 
 # A. 处理用户输入框 (只负责接收，不负责生成)
-if prompt := st.chat_input("请在此输入您与南师的思想对话..."):
+if prompt := st.chat_input("请在此输入您与南师的对话..."):
     st.session_state.messages.append({"role": "user", "content": prompt})
 
 # B. 判断是否需要 AI 回答
 # 逻辑：如果最后一条消息是 User 发的，说明 AI 还没回，这就触发回答
 if st.session_state.messages and st.session_state.messages[-1]["role"] == "user":
     
-    with st.chat_message("assistant", avatar="🍵"):
+    with st.chat_message("assistant", avatar="assets/nanshi_icon.png"):
         message_placeholder = st.empty()
         if rag_chain:
-            with st.spinner("南师再次轻啜一口，微笑的看着你..."):
+            with st.spinner("南师正在沉思..."):
                 try:
                     # 1. 准备上下文
                     chat_history = []
@@ -311,5 +407,3 @@ if st.session_state.messages and st.session_state.messages[-1]["role"] == "assis
                 # 清空建议，防止重复点击
                 st.session_state.current_suggestions = []
                 st.rerun()
-
-
