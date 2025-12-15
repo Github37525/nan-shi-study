@@ -229,7 +229,7 @@ def initialize_rag():
     )
     
     embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004", google_api_key=api_key)
-    index_path = "faiss_index_v2"
+    index_path = "faiss_index"
     
     vectorstore = None
     if os.path.exists(index_path):
@@ -407,3 +407,4 @@ if st.session_state.messages and st.session_state.messages[-1]["role"] == "assis
                 # 清空建议，防止重复点击
                 st.session_state.current_suggestions = []
                 st.rerun()
+
